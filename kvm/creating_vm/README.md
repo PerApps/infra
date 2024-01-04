@@ -19,6 +19,9 @@ In order to create virtual machines, you can use the `virt-install` command alon
 * --graphics: Specifies the graphical display configuration, if none it uses a serial console connection without graphical access.
 * --autostart: Start the VM when the host server comes up.
 * --import: Skip the OS installation process, and build a guest around an existing disk image.
+* --network option allows you to connect the guest to the host network. It has various sub-options:
+    * network: Allows you to connect to a virtual network in the host. The syntax is --network network=NAME, where NAME is the name of the virtual network.
+    * mac.address: Allows you to set a fixed MAC address for the guest. The syntax is --network mac=MAC_ADDRESS, where MAC_ADDRESS is the desired static MAC address that you want to assign to the guest.
 
 Refer to the [official archlinx documentation](https://man.archlinux.org/man/virt-install.1) for more detailed information.
 
@@ -38,3 +41,29 @@ local-hostname: k8s-worker-vm
 ```
 
 In this example, the VM is assigned the name 'k8s-worker-guest' and the hostname 'k8s-worker-vm'.
+
+Use `---cloud-init meta-data=<meta date file>` arguments whis `virt-install`.
+
+## Example of Network Configuration
+Here's an example of a network configuration in a YAML file:
+```yaml
+network:
+    version: 2
+    ethernets:
+        interface0:
+            match:
+                macaddress: "<your mac address>"
+            dhcp4: false
+            dhcp6: false
+            addresses:
+                - 10.0.0.2/12
+            gateway4: 10.0.0.1
+            set-name: interface0
+            nameservers:
+                addresses: [10.0.0.1]
+```
+
+This configuration sets up a static IP address, `nameservers addresses` is the dns.
+
+Use `--cloud-init network-config=<network configuration file> --network mac.address="<your mac address>"` arguments whis `virt-install`.
+Remember to replace `<your mac address>` with the actual Mac address you want to assign to the interface
