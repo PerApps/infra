@@ -1,0 +1,83 @@
+---
+- name: SetupK8sMaster
+  hosts: k8s_master
+  become: yes
+  
+  tasks:
+  - name: Add k8s foolder
+    ansible.builtin.file:
+      path: /root/k8s
+      state: directory
+    
+  - name: Put config.yaml
+    ansible.builtin.copy:
+      src: ../config.yaml
+      dest: /root/k8s/config.yaml
+      
+  - name: Add calico foolder
+    ansible.builtin.file:
+      path: /root/k8s/calico
+      state: directory
+      
+  - name: Get calico tigera-operator
+    get_url:
+      url: https://raw.githubusercontent.com/projectcalico/calico/v3.27.0/manifests/tigera-operator.yaml
+      dest: /root/k8s/calico/tigera-operator.yaml
+
+  - name: Get calico custom-resources
+    get_url:
+      url: https://raw.githubusercontent.com/projectcalico/calico/v3.27.0/manifests/custom-resources.yaml
+      dest: /root/k8s/calico/custom-resources.yaml
+      
+  - name: Get calico file
+    get_url:
+      url: https://raw.githubusercontent.com/projectcalico/calico/v3.27.0/manifests/calico.yaml
+      dest: /root/k8s/calico/calico.yaml
+      
+  - name: Add metrics_server foolder
+    ansible.builtin.file:
+      path: /root/k8s/metrics_server
+      state: directory
+      
+  - name: Get metrics server
+    get_url:
+      url: https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+      dest: /root/k8s/metrics_server/metrics-server.yaml
+      
+  - name: Install kubernetes python package
+    ansible.builtin.pip:
+      name: kubernetes
+      
+  - name: Kubeadm init
+    ansible.builtin.shell: kubeadm init --config /root/k8s/config.yaml
+
+  - name: Add .kube foolder
+    ansible.builtin.file:
+      path: /root/.kube
+      state: directory
+      
+  - name: Copy a "sudoers" file on the remote machine for editing
+    ansible.builtin.copy:
+      src: /etc/kubernetes/admin.conf
+      dest: /root/.kube/config
+      remote_src: yes
+    
+  - name: Deployment calico tigera-operator.yaml
+    kubernetes.core.k8s:
+      state: present
+      src: /root/k8s/calico/tigera-operator.yaml
+    
+  - name: Deployment calico custom-resources.yaml
+    kubernetes.core.k8s:
+      state: present
+      src: /root/k8s/calico/custom-resources.yaml
+    
+  - name: Deployment calico.yaml
+    kubernetes.core.k8s:
+      state: present
+      src: /root/k8s/calico/calico.yaml
+      
+  - name: Deployment metrics-server
+    kubernetes.core.k8s:
+      state: present
+      src: /root/k8s/metrics_server/metrics-server.yaml
