@@ -66,4 +66,32 @@ network:
 This configuration sets up a static IP address, `nameservers addresses` is the dns.
 
 Use `--cloud-init network-config=<network configuration file> --network mac.address="<your mac address>"` arguments whis `virt-install`.
-Remember to replace `<your mac address>` with the actual Mac address you want to assign to the interface
+Remember to replace `<your mac address>` with the actual Mac address you want to assign to the interface.
+
+## Exempe of `virt-install` Command
+This is an example of how to use the virt-install command to create a new virtual machine:
+```bash
+sudo virt-install \
+--name k8s-worker-guest \
+--vcpu 2 \
+--memory 2048 \
+--os-variant centos-stream8 \
+--disk VMs/k8s-worker-guest.qcow2 \
+--import \
+--noautoconsole \
+--cloud-init clouduser-ssh-key=vm-ssh.pub,meta-data=meta-data,network-config=network-config \
+--network network=bridged-network,mac.address="0a:fb:bb:4b:f9:68"
+```
+
+Let's break down some of the options used:
+* --name k8s-worker-guest: Names the virtual machine as "k8s-worker-guest".
+* --vcpu 2: Allocates 2 virtual CPUs to the virtual machine.
+* --memory 2048: Allocates 2048MB of memory to the virtual machine.
+* --os-variant centos-stream8: Specifies the OS variant for the virtual machine.
+* --disk VMs/k8s-worker-guest.qcow2: Specifies the disk image location.
+* --import: This option is used to import an existing disk image.
+* --noautoconsole: Disables the automatic console launch.
+* --cloud-init clouduser-ssh-key=vm-ssh.pub,meta-data=meta-data,network-config=network-config: Specifies the cloud-init configuration for the virtual machine. It sets the SSH key, metadata, and network configuration.
+* --network network=bridged-network,mac.address="0a:fb:bb:4b:f9:68": Uses a bridged network and sets the MAC address of the network interface.
+
+Remember to replace the values with your specific configuration. This example command allows you to create a new VM using KVM with a specified MAC address for the network interface.
