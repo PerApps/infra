@@ -7,8 +7,8 @@ Welcome to our guide of practical tips for managing KVM guests.
 
 ## Creating Images
 In this section, we provide valuable strategies and advice for generating image files for KVM guests.
-Please refer to the `creating_images/README.md` file for detailed information and step-by-step instructions.
+Please refer to the [creating_images/README.md](creating_images/README.md) file for detailed information and step-by-step instructions.
 
 ## Creating VM
 This section will provide strategies, advice, and in-depth guidance on creating virtual machines.
-For detailed, step-by-step instructions, please refer to the `creating_vm/README.md file`.
+For detailed, step-by-step instructions, please refer to the [creating_vm/README.md](creating_vm/README.md) file.
