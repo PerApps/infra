@@ -143,3 +143,24 @@
       ansible.builtin.file:
         path: /tmp/join-command.txt
         state: absent
+
+- name: Approve pending worker CSRs
+  hosts: k8s_master
+  become: yes
+  tasks:
+    - name: Gather list of CSRs
+      kubernetes.core.k8s_info:
+        api_version: certificates.k8s.io/v1
+        kind: CertificateSigningRequest
+      register: csr_list
+
+    - name: Filter CSRs with pending status
+      set_fact:
+        csrs_pending: "{{ csr_list.resources | selectattr('status', 'equalto', {}) | list }}"
+
+    - name: Approve pending CSRs
+      shell: kubectl certificate approve {{ item.metadata.name }}
+      loop: "{{ csrs_pending }}"
+      when: csrs_pending | length > 0
+      loop_control:
+        label: "{{ item.metadata.name }}"
