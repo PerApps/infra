@@ -2,8 +2,8 @@
 In this repository, you'll find an Ansible playbook dedicated to preparing your server for hosting Kubernetes.
 
 ## Location
-- For Enterprise Linux 8, CentOS 8, and CentOS Stream 8:
-The Ansible playbook is located in the `el8/setup` directory of this repository.
+- For Debian 12:
+The Ansible playbook is located in the `debian12/setup` directory of this repository.
 
 ## Functionality 
 When executed, this playbook will install two key components on your server:
@@ -21,5 +21,5 @@ Perform the following steps to run the Ansible playbook for setting up your serv
 
 2. **Run the Playbook:** Now you're ready to execute the playbook. Run the following command:
 ```bash
-ansible-playbook el8/setup.yml -i inventory
+ansible-playbook debian12/setup.yml -i inventory
 ```

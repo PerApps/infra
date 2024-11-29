@@ -1,0 +1,145 @@
+---
+- name: SetupK8sMaster
+  hosts: k8s_master
+  become: yes
+  tasks:
+    - name: Add k8s folder
+      ansible.builtin.file:
+        path: /root/k8s
+        state: directory
+
+    - name: Put config.yaml
+      ansible.builtin.copy:
+        src: ./master_config.yaml
+        dest: /root/k8s/config.yaml
+
+    - name: Add calico folder
+      ansible.builtin.file:
+        path: /root/k8s/calico
+        state: directory
+
+    - name: Get calico tigera-operator
+      ansible.builtin.get_url:
+        url: https://raw.githubusercontent.com/projectcalico/calico/v3.29.1/manifests/tigera-operator.yaml
+        dest: /root/k8s/calico/tigera-operator.yaml
+
+    - name: Get calico custom-resources
+      ansible.builtin.get_url:
+        url: https://raw.githubusercontent.com/projectcalico/calico/v3.29.1/manifests/custom-resources.yaml
+        dest: /root/k8s/calico/custom-resources.yaml
+
+    - name: Get calico file
+      ansible.builtin.get_url:
+        url: https://raw.githubusercontent.com/projectcalico/calico/v3.29.1/manifests/calico.yaml
+        dest: /root/k8s/calico/calico.yaml
+
+    - name: Add metrics_server folder
+      ansible.builtin.file:
+        path: /root/k8s/metrics_server
+        state: directory
+
+    - name: Get metrics server
+      ansible.builtin.get_url:
+        url: https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.7.2/components.yaml
+        dest: /root/k8s/metrics_server/metrics-server.yaml
+
+    - name: Install kubernetes python package
+      ansible.builtin.apt:
+        name:
+          - python3-kubernetes
+        state: present
+
+    - name: Kubeadm init
+      ansible.builtin.shell: kubeadm init --config /root/k8s/config.yaml
+
+    - name: Add .kube folder
+      ansible.builtin.file:
+        path: /root/.kube
+        state: directory
+
+    - name: Copy a "sudoers" file on the remote machine for editing
+      ansible.builtin.copy:
+        src: /etc/kubernetes/admin.conf
+        dest: /root/.kube/config
+        remote_src: yes
+
+    - name: Deploy calico tigera-operator.yaml
+      kubernetes.core.k8s:
+        state: present
+        src: /root/k8s/calico/tigera-operator.yaml
+
+    - name: Deploy calico custom-resources.yaml
+      kubernetes.core.k8s:
+        state: present
+        src: /root/k8s/calico/custom-resources.yaml
+
+    - name: Deploy calico.yaml
+      kubernetes.core.k8s:
+        state: present
+        src: /root/k8s/calico/calico.yaml
+
+    - name: Deploy metrics-server
+      kubernetes.core.k8s:
+        state: present
+        src: /root/k8s/metrics_server/metrics-server.yaml
+
+    - name: Gather list of CSRs
+      kubernetes.core.k8s_info:
+        api_version: certificates.k8s.io/v1
+        kind: CertificateSigningRequest
+      register: csr_list
+
+    - name: Filter CSRs with pending status
+      set_fact:
+        csrs_pending: "{{ csr_list.resources | selectattr('status', 'equalto', {}) | list }}"
+
+    - name: Approve pending CSRs
+      shell: kubectl certificate approve {{ item.metadata.name }}
+      loop: "{{ csrs_pending }}"
+      when: csrs_pending | length > 0
+      loop_control:
+        label: "{{ item.metadata.name }}"
+
+    - name: Generate join token and hash
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: ConfigMap
+        namespace: kube-system
+        name: kubeadm-config
+      register: kubeadm_config
+
+    - name: Generate Join Token
+      command: kubeadm token create --print-join-command
+      register: join_command
+
+    - name: Save join command for workers
+      local_action: copy content={{ join_command.stdout }} dest=/tmp/join-command.txt
+      when: join_command.stdout is defined
+
+- name: SetupK8sWorkers
+  hosts: k8s_worker
+  become: yes
+  tasks:
+    - name: Put join command file
+      ansible.builtin.copy:
+        src: /tmp/join-command.txt
+        dest: /tmp/join-command.txt
+
+    - name: Read join command
+      slurp:
+        src: /tmp/join-command.txt
+      register: join_command
+
+    - name: Join Worker Nodes to the Cluster
+      shell: "{{ join_command.content | b64decode }} --cri-socket unix:///var/run/cri-dockerd.sock"
+
+    - name: Ensure kubelet is running
+      ansible.builtin.systemd:
+        name: kubelet
+        enabled: yes
+        state: started
+
+    - name: Delete join command file
+      ansible.builtin.file:
+        path: /tmp/join-command.txt
+        state: absent
