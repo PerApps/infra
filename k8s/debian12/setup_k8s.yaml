@@ -1,47 +1,65 @@
 ---
-- name: SetupK8sMaster
+- name: SetupServer
   hosts: k8s_master
   become: yes
+
   tasks:
     - name: Add k8s folder
       ansible.builtin.file:
         path: /root/k8s
         state: directory
+        owner: root
+        group: root
+        mode: '0755'
 
-    - name: Put config.yaml
+    - name: Copy init config file to remote host
       ansible.builtin.copy:
-        src: ./master_config.yaml
-        dest: /root/k8s/config.yaml
+        src: init_config.yaml
+        dest: /root/k8s/init_config.yaml
+        owner: root
+        group: root
+        mode: '0644'
 
     - name: Add calico folder
       ansible.builtin.file:
         path: /root/k8s/calico
         state: directory
+        owner: root
+        group: root
+        mode: '0755'
 
-    - name: Get calico tigera-operator
+    - name: Download calico tigera-operator
       ansible.builtin.get_url:
         url: https://raw.githubusercontent.com/projectcalico/calico/v3.29.1/manifests/tigera-operator.yaml
         dest: /root/k8s/calico/tigera-operator.yaml
+        mode: '0644'
 
-    - name: Get calico custom-resources
+
+    - name: Download calico custom-resources
       ansible.builtin.get_url:
         url: https://raw.githubusercontent.com/projectcalico/calico/v3.29.1/manifests/custom-resources.yaml
         dest: /root/k8s/calico/custom-resources.yaml
+        mode: '0644'
 
-    - name: Get calico file
+    - name: Download calico manifests
       ansible.builtin.get_url:
         url: https://raw.githubusercontent.com/projectcalico/calico/v3.29.1/manifests/calico.yaml
         dest: /root/k8s/calico/calico.yaml
+        mode: '0644'
 
     - name: Add metrics_server folder
       ansible.builtin.file:
         path: /root/k8s/metrics_server
         state: directory
+        owner: root
+        group: root
+        mode: '0755'
 
-    - name: Get metrics server
+    - name: Download metrics server
       ansible.builtin.get_url:
         url: https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.7.2/components.yaml
         dest: /root/k8s/metrics_server/metrics-server.yaml
+        mode: '0644'
 
     - name: Install kubernetes python package
       ansible.builtin.apt:
@@ -50,14 +68,17 @@
         state: present
 
     - name: Kubeadm init
-      ansible.builtin.shell: kubeadm init --config /root/k8s/config.yaml
+      ansible.builtin.shell: kubeadm init --config /root/k8s/init_config.yaml
 
     - name: Add .kube folder
       ansible.builtin.file:
         path: /root/.kube
         state: directory
+        owner: root
+        group: root
+        mode: '0755'
 
-    - name: Copy a "sudoers" file on the remote machine for editing
+    - name: Copy admin.conf file in .kube on the remote machine
       ansible.builtin.copy:
         src: /etc/kubernetes/admin.conf
         dest: /root/.kube/config
@@ -83,71 +104,6 @@
         state: present
         src: /root/k8s/metrics_server/metrics-server.yaml
 
-    - name: Gather list of CSRs
-      kubernetes.core.k8s_info:
-        api_version: certificates.k8s.io/v1
-        kind: CertificateSigningRequest
-      register: csr_list
-
-    - name: Filter CSRs with pending status
-      set_fact:
-        csrs_pending: "{{ csr_list.resources | selectattr('status', 'equalto', {}) | list }}"
-
-    - name: Approve pending CSRs
-      shell: kubectl certificate approve {{ item.metadata.name }}
-      loop: "{{ csrs_pending }}"
-      when: csrs_pending | length > 0
-      loop_control:
-        label: "{{ item.metadata.name }}"
-
-    - name: Generate join token and hash
-      kubernetes.core.k8s_info:
-        api_version: v1
-        kind: ConfigMap
-        namespace: kube-system
-        name: kubeadm-config
-      register: kubeadm_config
-
-    - name: Generate Join Token
-      command: kubeadm token create --print-join-command
-      register: join_command
-
-    - name: Save join command for workers
-      local_action: copy content={{ join_command.stdout }} dest=/tmp/join-command.txt
-      when: join_command.stdout is defined
-
-- name: SetupK8sWorkers
-  hosts: k8s_worker
-  become: yes
-  tasks:
-    - name: Put join command file
-      ansible.builtin.copy:
-        src: /tmp/join-command.txt
-        dest: /tmp/join-command.txt
-
-    - name: Read join command
-      slurp:
-        src: /tmp/join-command.txt
-      register: join_command
-
-    - name: Join Worker Nodes to the Cluster
-      shell: "{{ join_command.content | b64decode }} --cri-socket unix:///var/run/cri-dockerd.sock"
-
-    - name: Ensure kubelet is running
-      ansible.builtin.systemd:
-        name: kubelet
-        enabled: yes
-        state: started
-
-    - name: Delete join command file
-      ansible.builtin.file:
-        path: /tmp/join-command.txt
-        state: absent
-
-- name: Approve pending worker CSRs
-  hosts: k8s_master
-  become: yes
-  tasks:
     - name: Gather list of CSRs
       kubernetes.core.k8s_info:
         api_version: certificates.k8s.io/v1

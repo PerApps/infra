@@ -1,0 +1,62 @@
+---
+- name: SetupServer
+  hosts: k8s_master
+  become: yes
+
+  tasks:
+    - name: Generate Join Token
+      command: kubeadm token create --print-join-command
+      register: join_command
+
+    - name: Save join command for workers
+      local_action: copy content={{ join_command.stdout }} dest=/tmp/join-command.txt
+      when: join_command.stdout is defined
+
+- name: SetupWorkers
+  hosts: k8s_worker
+  become: yes
+  tasks:
+    - name: Put join command file
+      ansible.builtin.copy:
+        src: /tmp/join-command.txt
+        dest: /tmp/join-command.txt
+
+    - name: Read join command
+      slurp:
+        src: /tmp/join-command.txt
+      register: join_command
+
+    - name: Join Worker Nodes to the Cluster
+      shell: "{{ join_command.content | b64decode }}"
+
+    - name: Ensure kubelet is running
+      ansible.builtin.systemd:
+        name: kubelet
+        enabled: yes
+        state: started
+
+    - name: Delete join command file
+      ansible.builtin.file:
+        path: /tmp/join-command.txt
+        state: absent
+
+- name: Approve pending worker CSRs
+  hosts: k8s_master
+  become: yes
+  tasks:
+    - name: Gather list of CSRs
+      kubernetes.core.k8s_info:
+        api_version: certificates.k8s.io/v1
+        kind: CertificateSigningRequest
+      register: csr_list
+
+    - name: Filter CSRs with pending status
+      set_fact:
+        csrs_pending: "{{ csr_list.resources | selectattr('status', 'equalto', {}) | list }}"
+
+    - name: Approve pending CSRs
+      shell: kubectl certificate approve {{ item.metadata.name }}
+      loop: "{{ csrs_pending }}"
+      when: csrs_pending | length > 0
+      loop_control:
+        label: "{{ item.metadata.name }}"
